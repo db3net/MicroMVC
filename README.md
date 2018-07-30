@@ -20,6 +20,23 @@ Root
   |_models
   
 ```
+You **config/config.php** file should look like this example. Note. The routing is stupidly rudimental. No fancy placeholders for vars...simply anything and everything after the directive ('controller/method') is considered an arg and passed along to the controller.  
+```
+$_config = array(
+	
+	'_database' => array(
+		'type'=>'file',
+	),
+
+	'_routes' => array(
+		'__default'=>'welcome',
+    '__404'=>'404',
+		'jmp'=>'redirect/jump_from_shortcode',
+	)
+);
+```
+
+
 
 Your index.php file will look like the following. You can put your MicroMVC folder anywhere on your file-system...preferably away from webserver access.
 

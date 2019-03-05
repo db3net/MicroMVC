@@ -20,8 +20,11 @@ Root
   |_models
   
   
-## config/config.php  
+
+
 ```
+## config/config.php  
+
 Your **config/config.php** file should look like this example. Note. The routing is stupidly rudimental. No fancy placeholders for vars...simply anything and everything after the directive ('controller/method') is considered an arg and passed along to the controller.  
 ```
 $_config = array(

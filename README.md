@@ -19,8 +19,10 @@ Root
   |_views
   |_models
   
+  
+## config/config.php  
 ```
-You **config/config.php** file should look like this example. Note. The routing is stupidly rudimental. No fancy placeholders for vars...simply anything and everything after the directive ('controller/method') is considered an arg and passed along to the controller.  
+Your **config/config.php** file should look like this example. Note. The routing is stupidly rudimental. No fancy placeholders for vars...simply anything and everything after the directive ('controller/method') is considered an arg and passed along to the controller.  
 ```
 $_config = array(
 	
@@ -37,6 +39,7 @@ $_config = array(
 ```
 
 
+## index.php
 
 Your index.php file will look like the following. You can put your MicroMVC folder anywhere on your file-system...preferably away from webserver access.
 

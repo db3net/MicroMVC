@@ -328,8 +328,9 @@ class Loader
 /**
  * Maps incoming requests to controller/method pairs using config-based routes.
  *
- * URL pattern: index.php?/<controller>/<method>/arg1/arg2/...
- * CLI pattern: php index.php <controller>/<method>/arg1/arg2/...
+ * URL pattern: /controller/method/arg1/arg2/...
+ * Legacy URL:  index.php?/controller/method/arg1/arg2/...
+ * CLI pattern: php index.php controller/method/arg1/arg2/...
  */
 class Router
 {
@@ -434,6 +435,9 @@ class Router
 
 /**
  * URL/HTTP request helpers.
+ *
+ * Supports both clean URLs (/controller/method/arg) and legacy query-string
+ * style (index.php?/controller/method/arg). Clean URLs take precedence.
  */
 class URL
 {
@@ -462,6 +466,60 @@ class URL
     }
 
     /**
+     * Extract the route path from the request.
+     *
+     * Checks PATH_INFO and REQUEST_URI path first (clean URLs), then falls
+     * back to QUERY_STRING (legacy ?/controller/method style).
+     *
+     * @return string The route path, e.g. "controller/method/arg1/arg2"
+     */
+    public static function path(): string
+    {
+        // Clean URLs: PATH_INFO is set by Apache/Nginx when rewriting
+        if (!empty($_SERVER['PATH_INFO'])) {
+            return trim($_SERVER['PATH_INFO'], '/');
+        }
+
+        // Clean URLs: parse the path from REQUEST_URI (strip script name)
+        $uri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+        $script = $_SERVER['SCRIPT_NAME'] ?? '';
+        $scriptDir = dirname($script);
+
+        // Remove the script directory prefix (e.g. /subdir) from the URI
+        if ($scriptDir !== '/' && str_starts_with($uri, $scriptDir)) {
+            $uri = substr($uri, strlen($scriptDir));
+        }
+        // Remove the script filename itself (e.g. /index.php)
+        if (str_starts_with($uri, '/' . basename($script))) {
+            $uri = substr($uri, strlen('/' . basename($script)));
+        }
+
+        $path = trim($uri, '/');
+        if ($path !== '') {
+            return $path;
+        }
+
+        // Legacy fallback: ?/controller/method/arg style
+        $q = ltrim($_SERVER['QUERY_STRING'] ?? '', '/');
+        // parse_str treats the first path as a key; just return it raw
+        return strtok($q, '&') ?: '';
+    }
+
+    /**
+     * Get path segments as an array.
+     *
+     * @return string[]
+     */
+    public static function segments(): array
+    {
+        $path = self::path();
+        if ($path === '') {
+            return [];
+        }
+        return explode('/', $path);
+    }
+
+    /**
      * Parse the query string into an associative array.
      *
      * @return array<string, string>
@@ -474,32 +532,21 @@ class URL
     }
 
     /**
-     * Enumerate query-string arguments into a flat list.
+     * Enumerate URL segments into a flat list for the Input class.
      *
-     * Key-only params become string entries; key=value pairs become single-element arrays.
-     *
-     * @return array<int, mixed>
+     * @return array<int, string>
      */
     public static function enumeratedArgs(): array
     {
-        $args = self::args();
-        $out = [];
-        foreach ($args as $key => $arg) {
-            $out[] = ($arg !== '') ? [$key => $arg] : $key;
-        }
-        return $out;
+        return self::segments();
     }
 
     /**
-     * First query-string argument (the route directive).
+     * First URL segment — the route directive (e.g. "controller/method/args").
      */
     public static function firstArg(): string
     {
-        $args = self::enumeratedArgs();
-        if (empty($args)) {
-            return '';
-        }
-        return trim($args[0], '/');
+        return self::path();
     }
 }
 

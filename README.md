@@ -37,19 +37,9 @@ cd MicroMVC
 php -S localhost:8080 -t public
 ```
 
-**Apache:** Point your virtual host's document root to the `public/` directory. The included `.htaccess` handles URL rewriting automatically.
-
-**Nginx:** Route all requests to `public/index.php`:
-
-```nginx
-location / {
-    try_files $uri $uri/ /index.php?$query_string;
-}
-```
-
-### 3. Visit
-
 Open `http://localhost:8080` — you should see the welcome page.
+
+For production, see [Server Setup](#server-setup) below.
 
 ## Project Structure
 
@@ -71,9 +61,15 @@ MicroMVC/
 
 ### Routing
 
-A request hits `public/index.php`, which calls `Context::run()`. The router reads the URL (or CLI args), matches the first segment against `config/config.php`, and dispatches to the right controller and method.
+MicroMVC uses clean URLs out of the box — no query strings, no `index.php` in the URL:
 
-**URL pattern:** `/controller/method/arg1/arg2/...`
+```
+https://mysite.com/users/show/42
+                   ─────┬─────────
+                   controller/method/args
+```
+
+A request hits `public/index.php` (via server rewrite rules), which calls `Context::run()`. The router parses the URL path, matches the first segment against `config/config.php`, and dispatches to the right controller and method.
 
 Define routes in `config/config.php`:
 
@@ -173,6 +169,82 @@ JSONStore::log('audit', 'login', ['user' => 'user_42', 'ip' => '10.0.0.1']);
 ```
 
 Data is stored as `data/users.json`, `data/audit.json`, etc. — human-readable and easy to inspect.
+
+## Server Setup
+
+MicroMVC supports clean URLs (`/controller/method/arg1/arg2`) on all major server configurations. The `public/` directory is the document root — only `index.php` and static assets are exposed.
+
+### Apache
+
+Point your virtual host document root to the `public/` directory. The included `.htaccess` handles rewriting automatically.
+
+```apache
+<VirtualHost *:80>
+    ServerName mysite.com
+    DocumentRoot /var/www/mysite/public
+
+    <Directory /var/www/mysite/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+```
+
+Make sure `mod_rewrite` is enabled:
+
+```bash
+sudo a2enmod rewrite
+sudo systemctl restart apache2
+```
+
+The `.htaccess` file rewrites all non-file, non-directory requests to `index.php`:
+
+```apache
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php/$1 [QSA,L]
+```
+
+### Nginx
+
+```nginx
+server {
+    listen 80;
+    server_name mysite.com;
+    root /var/www/mysite/public;
+    index index.php;
+
+    # Route all requests through index.php (clean URLs)
+    location / {
+        try_files $uri $uri/ /index.php$uri?$query_string;
+    }
+
+    # Pass PHP requests to PHP-FPM
+    location ~ \.php(/|$) {
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_split_path_info ^(.+\.php)(/.*)$;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+    }
+
+    # Block access to dotfiles
+    location ~ /\. {
+        deny all;
+    }
+}
+```
+
+### PHP Built-in Server
+
+For local development, PHP's built-in server works with no extra config:
+
+```bash
+php -S localhost:8080 -t public
+```
+
+Clean URLs work automatically — the server falls back to `index.php` when a file isn't found.
 
 ## Containers & Microservices
 

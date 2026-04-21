@@ -66,6 +66,21 @@ class Context
         $method    = Router::getMethod();
         $arguments = Router::getArgs();
 
+        // Sanitize: class and method must be simple identifiers
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $class) ||
+            ($method !== '' && !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $method))) {
+            self::abort(400, 'Invalid request');
+            return;
+        }
+
+        // Block access to framework internals
+        $reserved = ['Config', 'Context', 'Controller', 'View', 'Request',
+            'Input', 'Loader', 'Router', 'URL', 'CLI', 'M2Object', 'Store', 'JSONStore'];
+        if (in_array($class, $reserved, true)) {
+            self::abort(403, 'Forbidden');
+            return;
+        }
+
         if (!class_exists($class)) {
             $path = 'controllers/' . $class . '.php';
             if (file_exists($path)) {
@@ -73,12 +88,34 @@ class Context
             }
         }
 
+        if (!class_exists($class)) {
+            self::abort(404, 'Not found');
+            return;
+        }
+
         if ($method === '') {
             $method = 'index';
         }
 
         $controller = new $class();
+
+        if (!($controller instanceof Controller)) {
+            self::abort(403, 'Forbidden');
+            return;
+        }
+
         $controller->_call($method, $arguments);
+    }
+
+    /**
+     * Send an error response and stop execution.
+     */
+    private static function abort(int $code, string $message): void
+    {
+        if (!self::isCLI()) {
+            http_response_code($code);
+        }
+        echo $message;
     }
 }
 
@@ -93,11 +130,22 @@ class Controller
     /**
      * Dispatch a method call with arguments.
      *
+     * Only public methods defined on the controller subclass are callable.
+     * Methods starting with _ and inherited Controller methods are blocked.
+     *
      * @param string               $method Method name to invoke.
      * @param array<int, mixed>    $args   Positional arguments.
      */
     public function _call(string $method, array $args = []): void
     {
+        // Block internal/magic methods and base Controller methods
+        $blocked = ['_call', 'output', 'json_output', 'display', '__construct',
+            '__destruct', '__call', '__get', '__set', '__toString'];
+        if (str_starts_with($method, '_') || in_array($method, $blocked, true)) {
+            echo "Method named: '{$method}' is not accessible";
+            return;
+        }
+
         if (method_exists($this, $method)) {
             call_user_func_array([$this, $method], $args);
         } else {
@@ -310,14 +358,22 @@ class Loader
      */
     public static function loadView(string $view, array $data = [], bool $asVar = false): mixed
     {
+        // Prevent path traversal
+        $realBase = realpath('views');
+        $realPath = realpath('views/' . $view);
+        if ($realBase === false || $realPath === false || !str_starts_with($realPath, $realBase)) {
+            echo 'View not found';
+            return null;
+        }
+
         extract($data);
 
         if ($asVar) {
             ob_start();
-            include 'views/' . $view;
+            include $realPath;
             return ob_get_clean();
         }
-        include 'views/' . $view;
+        include $realPath;
         return null;
     }
 }
@@ -648,6 +704,14 @@ class JSONStore extends Store
     private static string $dataDir = 'data';
 
     /**
+     * Sanitize a collection name to prevent path traversal.
+     */
+    private static function safeName(string $name): string
+    {
+        return preg_replace('/[^a-zA-Z0-9_\-]/', '', $name);
+    }
+
+    /**
      * Fetch a record by class and identifier.
      *
      * @param  string $class      The data collection name.
@@ -656,7 +720,7 @@ class JSONStore extends Store
      */
     public static function fetch(string $class, string $identifier): mixed
     {
-        $file = self::$dataDir . '/' . $class . '.json';
+        $file = self::$dataDir . '/' . self::safeName($class) . '.json';
         if (!file_exists($file)) {
             return false;
         }
@@ -673,7 +737,7 @@ class JSONStore extends Store
      */
     public static function put(string $class, string $identifier, mixed $data): void
     {
-        $file = self::$dataDir . '/' . $class . '.json';
+        $file = self::$dataDir . '/' . self::safeName($class) . '.json';
         $dstore = [];
         if (file_exists($file)) {
             $dstore = json_decode(file_get_contents($file), true) ?? [];
@@ -699,7 +763,7 @@ class JSONStore extends Store
             $data = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK);
         }
 
-        $buf = time() . ' | ' . $class . '.' . $identifier . ' | ' . $data . "\n";
+        $buf = time() . ' | ' . self::safeName($class) . '.' . $identifier . ' | ' . $data . "\n";
         $logFile = self::$dataDir . '/log';
 
         $handle = fopen($logFile, 'a');

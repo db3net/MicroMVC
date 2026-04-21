@@ -1,130 +1,181 @@
 # MicroMVC
 
-Single-file, zero-dependency PHP MVC framework with routing, views, CLI support, and a simple JSON file-store.
+A single-file, zero-dependency PHP micro-framework. The entire MVC framework — routing, controllers, views, and a JSON file-store — lives in one file: `src/MicroMVC.php`.
 
-## Features
+## Why?
 
-- **One file** — the entire framework lives in `src/MicroMVC.php`
-- **URL and CLI routing** — same controllers work from the browser and the command line
-- **Simple config-based routes** — map URL slugs to controller/method pairs
-- **Views with data extraction** — pass an array, get variables in your template
-- **JSON file-store** — lightweight key/value persistence with no database required
-- **Zero dependencies** — just PHP 8.1+
+Sometimes you don't need Laravel. You need a controller, a view, and a route — and you need it running in 30 seconds. MicroMVC gives you a proper MVC structure with no composer dependencies, no build step, and no configuration ceremony.
+
+## Requirements
+
+- PHP 8.1+
+
+That's it. No extensions, no Composer packages, no database.
+
+## Getting Started
+
+### 1. Clone
+
+```bash
+git clone https://github.com/db3net/MicroMVC.git
+cd MicroMVC
+```
+
+### 2. Run
+
+**PHP built-in server (fastest way to start):**
+
+```bash
+php -S localhost:8080 -t public
+```
+
+**Apache:** Point your virtual host's document root to the `public/` directory. The included `.htaccess` handles URL rewriting automatically.
+
+**Nginx:** Route all requests to `public/index.php`:
+
+```nginx
+location / {
+    try_files $uri $uri/ /index.php?$query_string;
+}
+```
+
+### 3. Visit
+
+Open `http://localhost:8080` — you should see the welcome page.
 
 ## Project Structure
 
 ```
 MicroMVC/
-├── src/
-│   └── MicroMVC.php        # The framework (single file)
-├── config/
-│   └── config.php           # Routes and app configuration
-├── controllers/             # Your controller classes
-├── views/                   # PHP view templates
-├── models/                  # Model classes (optional)
-├── data/                    # JSON file-store data directory
+├── src/MicroMVC.php         # The entire framework — one file
 ├── public/
-│   ├── index.php            # Web entry point
-│   └── .htaccess            # Apache rewrite rules
-├── composer.json
-└── LICENSE
+│   ├── index.php            # Web entry point (3 lines)
+│   └── .htaccess            # Apache URL rewriting
+├── config/config.php        # Routes and settings
+├── controllers/             # Your controllers go here
+├── views/                   # Your view templates go here
+├── models/                  # Your models go here (optional)
+├── data/                    # JSON file-store writes here
+└── composer.json            # Optional — for autoloading convenience
 ```
 
-## Quick Start
+## How It Works
 
-```bash
-git clone https://github.com/db3net/MicroMVC.git
-cd MicroMVC
+### Routing
 
-# Option A: PHP built-in server
-php -S localhost:8080 -t public
+A request hits `public/index.php`, which calls `Context::run()`. The router reads the URL (or CLI args), matches the first segment against `config/config.php`, and dispatches to the right controller and method.
 
-# Option B: Apache — point your vhost document root to the public/ directory
-```
+**URL pattern:** `/controller/method/arg1/arg2/...`
 
-Visit `http://localhost:8080` and you should see the welcome page.
-
-## Routing
-
-Routes are defined in `config/config.php`:
+Define routes in `config/config.php`:
 
 ```php
 $_config = [
     '_routes' => [
-        '__default' => 'welcome',          // GET / → welcome::index()
-        '__404'     => 'notfound/index',    // fallback
-        'dashboard' => 'admin/dashboard',   // GET /dashboard → admin::dashboard()
+        '__default' => 'welcome',           // / → welcome::index()
+        '__404'     => 'notfound/index',     // unmatched routes
+        'dash'      => 'admin/dashboard',    // /dash → admin::dashboard()
     ],
 ];
 ```
 
-URLs follow the pattern `index.php?/<controller>/<method>/arg1/arg2/...`
+- `__default` — where `/` goes
+- `__404` — where unmatched routes go
+- Everything else maps a URL slug to `controller/method`
 
-With the included `.htaccess`, clean URLs work automatically: `/dashboard/settings/arg1`
+If a URL doesn't match any route key, the segments are used directly as `controller/method`. So `/users/list` calls `users::list()` with no config entry needed.
 
-Any path segments after the controller/method are passed as arguments to the method.
+Arguments after the method are passed through automatically: `/users/show/42` calls `users::show('42')`.
 
-## Controllers
+### Writing a Controller
 
-Controllers extend the base `Controller` class:
+Create a file in `controllers/` matching the class name:
 
 ```php
-class welcome extends Controller
+// controllers/users.php
+class users extends Controller
 {
     public function index(): void
     {
-        $this->display('welcome', [
-            'title'   => 'Hello',
-            'message' => 'Welcome to MicroMVC.',
+        $this->display('users/list', [
+            'users' => ['Alice', 'Bob', 'Charlie'],
         ]);
     }
 
-    public function greet(string $name = 'world'): void
+    public function show(string $id = ''): void
     {
-        $this->json_output(['greeting' => "Hello, $name!"]);
+        $this->json_output(['user_id' => $id]);
     }
 }
 ```
 
-Place controller files in `controllers/` — they are auto-loaded by name.
+Controllers are auto-loaded by name — no registration or config needed.
 
-## Views
+**Available methods on `Controller`:**
 
-Views are plain PHP files in `views/`. Data passed from the controller is extracted into local variables:
+| Method | What it does |
+|---|---|
+| `$this->display('view', $data)` | Render a PHP view template |
+| `$this->display('view', $data, true)` | Render and return as string |
+| `$this->json_output($data)` | Echo JSON response |
+| `$this->json_output($data, true)` | Return JSON as string |
+
+### Writing a View
+
+Views are plain PHP files in `views/`. The `$data` array you pass from the controller is extracted into local variables:
 
 ```php
-<!-- views/welcome.php -->
-<h1><?= htmlspecialchars($title) ?></h1>
-<p><?= htmlspecialchars($message) ?></p>
+<!-- views/users/list.php -->
+<h1>Users</h1>
+<ul>
+    <?php foreach ($users as $user): ?>
+        <li><?= htmlspecialchars($user) ?></li>
+    <?php endforeach; ?>
+</ul>
 ```
 
-## CLI Usage
+### CLI Mode
 
-The same controllers work from the command line:
+The same controllers work from the command line — no changes needed:
 
 ```bash
-php public/index.php welcome/greet/David
+# Calls welcome::index()
+php public/index.php welcome
+
+# Calls users::show('42')
+php public/index.php users/show/42
 ```
 
-## JSON File-Store
+This makes it easy to build CLI tools, cron jobs, or admin scripts that share logic with your web app.
 
-A simple key/value store backed by JSON files in the `data/` directory:
+### JSON File-Store
+
+A simple key/value store backed by JSON files in the `data/` directory. No database setup required.
 
 ```php
-// Write
-JSONStore::put('users', 'user_123', ['name' => 'David', 'role' => 'admin']);
+// Store a record
+JSONStore::put('users', 'user_42', ['name' => 'David', 'role' => 'admin']);
 
-// Read
-$user = JSONStore::fetch('users', 'user_123');
+// Retrieve it
+$user = JSONStore::fetch('users', 'user_42');
+// → ['name' => 'David', 'role' => 'admin']
 
-// Log
-JSONStore::log('audit', 'login', ['user' => 'user_123']);
+// Append to a log file
+JSONStore::log('audit', 'login', ['user' => 'user_42', 'ip' => '10.0.0.1']);
 ```
 
-## Requirements
+Data is stored as `data/users.json`, `data/audit.json`, etc. — human-readable and easy to inspect.
 
-- PHP 8.1+
-- Apache with `mod_rewrite` (for clean URLs), or use PHP's built-in server
+## Configuration Reference
+
+`config/config.php` returns an array with these keys:
+
+| Key | Purpose | Example |
+|---|---|---|
+| `_routes` | URL slug → controller/method mapping | `['dash' => 'admin/dashboard']` |
+| `_database` | Storage backend config | `['type' => 'file']` |
+
+You can add your own keys and access them anywhere with `Config::forKey('your_key')`.
 
 ## License
 

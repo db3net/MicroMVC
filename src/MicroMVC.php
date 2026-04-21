@@ -10,6 +10,14 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1');
 
+// ── Autoloader for models ───────────────────────────────────────────────────
+
+spl_autoload_register(function (string $class): void {
+    $path = 'models/' . $class . '.php';
+    if (file_exists($path)) {
+        require_once $path;
+    }
+});
 
 // ── Configuration ───────────────────────────────────────────────────────────
 
@@ -75,7 +83,8 @@ class Context
 
         // Block access to framework internals
         $reserved = ['Config', 'Context', 'Controller', 'View', 'Request',
-            'Input', 'Loader', 'Router', 'URL', 'CLI', 'M2Object', 'Store', 'JSONStore'];
+            'Input', 'Loader', 'Router', 'URL', 'CLI', 'M2Object', 'Store', 'JSONStore',
+            'Model', 'JSONModel', 'MySQLModel', 'PGModel'];
         if (in_array($class, $reserved, true)) {
             self::abort(403, 'Forbidden');
             return;
@@ -833,4 +842,203 @@ function p(mixed $object): void
     print_r($object);
     echo "\n__________________________________________________________________\n";
     echo "</pre>";
+}
+
+
+// ── Models ──────────────────────────────────────────────────────────────────
+
+/**
+ * Base Model — Abstract superclass for all models.
+ *
+ * Subclasses must implement the storage backend methods.
+ * See JSONModel, MySQLModel, and PGModel for concrete implementations.
+ */
+abstract class Model extends M2Object
+{
+    abstract public function save(): void;
+    abstract public static function find(string $identifier): ?static;
+    abstract public static function delete(string $identifier): void;
+}
+
+/**
+ * JSONModel — Model backed by the built-in JSONStore.
+ *
+ * Zero-config, file-based persistence. Great for prototyping and small apps.
+ */
+abstract class JSONModel extends Model
+{
+    abstract protected static function storeName(): string;
+    abstract protected function identifier(): string;
+    abstract protected function toArray(): array;
+    abstract protected static function fromArray(array $data): static;
+
+    public function save(): void
+    {
+        JSONStore::put(static::storeName(), $this->identifier(), $this->toArray());
+    }
+
+    public static function find(string $identifier): ?static
+    {
+        $data = JSONStore::fetch(static::storeName(), $identifier);
+        if (!$data) {
+            return null;
+        }
+        return static::fromArray($data);
+    }
+
+    public static function delete(string $identifier): void
+    {
+        JSONStore::put(static::storeName(), $identifier, null);
+    }
+}
+
+/**
+ * MySQLModel — Model backed by a MySQL/MariaDB connection via PDO.
+ *
+ * Configure credentials in config/config.php under the 'mysql' key:
+ *   'mysql' => [
+ *       'host' => '127.0.0.1',
+ *       'port' => 3306,
+ *       'dbname' => 'myapp',
+ *       'user' => 'root',
+ *       'password' => '',
+ *   ]
+ */
+abstract class MySQLModel extends Model
+{
+    private static ?PDO $pdo = null;
+
+    abstract protected static function table(): string;
+    abstract protected static function primaryKey(): string;
+    abstract protected function toRow(): array;
+    abstract protected static function fromRow(array $row): static;
+
+    protected static function connection(): PDO
+    {
+        if (self::$pdo === null) {
+            $cfg = Config::forKey('mysql');
+            $dsn = sprintf(
+                'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+                $cfg['host'] ?? '127.0.0.1',
+                $cfg['port'] ?? 3306,
+                $cfg['dbname'] ?? ''
+            );
+            self::$pdo = new PDO($dsn, $cfg['user'] ?? '', $cfg['password'] ?? '', [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+        }
+        return self::$pdo;
+    }
+
+    public function save(): void
+    {
+        $row     = $this->toRow();
+        $columns = array_keys($row);
+        $placeholders = array_map(fn($c) => ":$c", $columns);
+        $updates = array_map(fn($c) => "$c = VALUES($c)", $columns);
+
+        $sql = sprintf(
+            'INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s',
+            static::table(),
+            implode(', ', $columns),
+            implode(', ', $placeholders),
+            implode(', ', $updates)
+        );
+
+        $stmt = static::connection()->prepare($sql);
+        $stmt->execute($row);
+    }
+
+    public static function find(string $identifier): ?static
+    {
+        $sql  = sprintf('SELECT * FROM %s WHERE %s = :id LIMIT 1', static::table(), static::primaryKey());
+        $stmt = static::connection()->prepare($sql);
+        $stmt->execute(['id' => $identifier]);
+        $row = $stmt->fetch();
+        return $row ? static::fromRow($row) : null;
+    }
+
+    public static function delete(string $identifier): void
+    {
+        $sql  = sprintf('DELETE FROM %s WHERE %s = :id', static::table(), static::primaryKey());
+        $stmt = static::connection()->prepare($sql);
+        $stmt->execute(['id' => $identifier]);
+    }
+}
+
+/**
+ * PGModel — Model backed by a PostgreSQL connection via PDO.
+ *
+ * Configure credentials in config/config.php under the 'pgsql' key:
+ *   'pgsql' => [
+ *       'host' => '127.0.0.1',
+ *       'port' => 5432,
+ *       'dbname' => 'myapp',
+ *       'user' => 'postgres',
+ *       'password' => '',
+ *   ]
+ */
+abstract class PGModel extends Model
+{
+    private static ?PDO $pdo = null;
+
+    abstract protected static function table(): string;
+    abstract protected static function primaryKey(): string;
+    abstract protected function toRow(): array;
+    abstract protected static function fromRow(array $row): static;
+
+    protected static function connection(): PDO
+    {
+        if (self::$pdo === null) {
+            $cfg = Config::forKey('pgsql');
+            $dsn = sprintf(
+                'pgsql:host=%s;port=%d;dbname=%s',
+                $cfg['host'] ?? '127.0.0.1',
+                $cfg['port'] ?? 5432,
+                $cfg['dbname'] ?? ''
+            );
+            self::$pdo = new PDO($dsn, $cfg['user'] ?? '', $cfg['password'] ?? '', [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+        }
+        return self::$pdo;
+    }
+
+    public function save(): void
+    {
+        $row     = $this->toRow();
+        $columns = array_keys($row);
+        $placeholders = array_map(fn($c) => ":$c", $columns);
+        $updates = array_map(fn($c) => "$c = EXCLUDED.$c", $columns);
+
+        $sql = sprintf(
+            'INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s',
+            static::table(),
+            implode(', ', $columns),
+            implode(', ', $placeholders),
+            static::primaryKey(),
+            implode(', ', $updates)
+        );
+
+        $stmt = static::connection()->prepare($sql);
+        $stmt->execute($row);
+    }
+
+    public static function find(string $identifier): ?static
+    {
+        $sql  = sprintf('SELECT * FROM %s WHERE %s = :id LIMIT 1', static::table(), static::primaryKey());
+        $stmt = static::connection()->prepare($sql);
+        $stmt->execute(['id' => $identifier]);
+        $row = $stmt->fetch();
+        return $row ? static::fromRow($row) : null;
+    }
+
+    public static function delete(string $identifier): void
+    {
+        $sql  = sprintf('DELETE FROM %s WHERE %s = :id', static::table(), static::primaryKey());
+        $stmt = static::connection()->prepare($sql);
+        $stmt->execute(['id' => $identifier]);
+    }
 }

@@ -82,6 +82,7 @@ MicroMVC/
 | Guide | What's covered |
 |---|---|
 | [Controllers & Views](docs/controllers-and-views.md) | Writing controllers, rendering views, JSON output |
+| [Models](docs/models.md) | JSONModel, MySQLModel, PGModel — switching backends |
 | [Routing](docs/routing.md) | Route config, default routes, 404 handling |
 | [CLI Mode](docs/cli.md) | Running controllers from the command line |
 | [JSON File-Store](docs/json-store.md) | Reading, writing, and logging data |

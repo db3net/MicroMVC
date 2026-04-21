@@ -1,0 +1,41 @@
+FROM alpine:3.20
+
+RUN apk add --no-cache php83 php83-fpm php83-json nginx \
+    && ln -s /usr/bin/php83 /usr/bin/php \
+    && mkdir -p /run/nginx
+
+# PHP-FPM: listen on socket, run as nobody
+RUN sed -i 's|listen = 127.0.0.1:9000|listen = /run/php-fpm.sock|' /etc/php83/php-fpm.d/www.conf \
+    && sed -i 's|;listen.owner = nobody|listen.owner = nginx|' /etc/php83/php-fpm.d/www.conf \
+    && sed -i 's|;listen.group = nobody|listen.group = nginx|' /etc/php83/php-fpm.d/www.conf
+
+# Nginx config
+RUN cat > /etc/nginx/http.d/default.conf << 'EOF'
+server {
+    listen 80;
+    server_name _;
+    root /app/public;
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php$uri?$query_string;
+    }
+
+    location ~ \.php(/|$) {
+        fastcgi_pass unix:/run/php-fpm.sock;
+        fastcgi_split_path_info ^(.+\.php)(/.*)$;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+    }
+
+    location ~ /\. { deny all; }
+}
+EOF
+
+COPY . /app
+WORKDIR /app
+
+EXPOSE 80
+
+CMD php-fpm83 && nginx -g 'daemon off;'

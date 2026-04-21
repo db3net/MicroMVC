@@ -1,0 +1,725 @@
+<?php
+// ──────────────────────────────────────────────────────────────────────────────
+// MicroMVC — Single-file, zero-dependency PHP MVC framework
+// Author: dblack
+// Email: dblack@merchante.com
+// Copyright (c) 2026 db3.net. All rights reserved.
+// ──────────────────────────────────────────────────────────────────────────────
+
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+
+
+// ── Configuration ───────────────────────────────────────────────────────────
+
+/**
+ * Loads and caches application configuration from config/config.php.
+ */
+class Config
+{
+    /** @var array<string, mixed>|null */
+    private static ?array $_config = null;
+
+    /**
+     * Get a top-level configuration value by key.
+     *
+     * If a global $_config is defined (e.g. injected in tests), it takes precedence.
+     *
+     * @param  string $key Configuration key (e.g. '_routes', '_database').
+     * @return mixed
+     */
+    public static function forKey(string $key): mixed
+    {
+        global $_config;
+        if (!empty($_config)) {
+            return $_config[$key] ?? null;
+        }
+
+        if (self::$_config === null) {
+            self::$_config = Loader::loadConfig();
+        }
+        return self::$_config[$key] ?? null;
+    }
+}
+
+
+// ── Context / Bootstrap ─────────────────────────────────────────────────────
+
+/**
+ * Application entry point — detects environment and dispatches the request.
+ */
+class Context
+{
+    /** Check whether we're running from the command line. */
+    public static function isCLI(): bool
+    {
+        return (php_sapi_name() === 'cli');
+    }
+
+    /**
+     * Resolve the route, load the controller, and call the method.
+     */
+    public static function run(): void
+    {
+        $class     = Router::getClass();
+        $method    = Router::getMethod();
+        $arguments = Router::getArgs();
+
+        if (!class_exists($class)) {
+            $path = 'controllers/' . $class . '.php';
+            if (file_exists($path)) {
+                include_once $path;
+            }
+        }
+
+        if ($method === '') {
+            $method = 'index';
+        }
+
+        $controller = new $class();
+        $controller->_call($method, $arguments);
+    }
+}
+
+
+// ── Controller ──────────────────────────────────────────────────────────────
+
+/**
+ * Base controller — extend this for each route handler.
+ */
+class Controller
+{
+    /**
+     * Dispatch a method call with arguments.
+     *
+     * @param string               $method Method name to invoke.
+     * @param array<int, mixed>    $args   Positional arguments.
+     */
+    public function _call(string $method, array $args = []): void
+    {
+        if (method_exists($this, $method)) {
+            call_user_func_array([$this, $method], $args);
+        } else {
+            echo "Method named: '{$method}' doesn't exist";
+        }
+    }
+
+    /** Default action — override in subclasses. */
+    public function index(): void
+    {
+        echo 'index';
+    }
+
+    /**
+     * Output data as JSON.
+     *
+     * @param string $type   Output type (currently only 'json').
+     * @param mixed  $data   Data to encode.
+     * @param string $view   Unused — reserved for future output types.
+     * @param bool   $as_var If true, return the string instead of echoing.
+     * @param int    $options json_encode option flags.
+     * @return string|void
+     */
+    public function output(
+        string $type = 'json',
+        mixed $data = '',
+        string $view = '',
+        bool $as_var = false,
+        int $options = JSON_NUMERIC_CHECK | JSON_UNESCAPED_SLASHES
+    ): mixed {
+        return $this->json_output($data, $as_var, $options);
+    }
+
+    /**
+     * Encode data as JSON and echo or return it.
+     *
+     * @param mixed $data    Data to encode.
+     * @param bool  $as_var  If true, return the JSON string.
+     * @param int   $options json_encode option flags.
+     * @return string|void
+     */
+    public function json_output(
+        mixed $data,
+        bool $as_var = false,
+        int $options = JSON_NUMERIC_CHECK | JSON_UNESCAPED_SLASHES
+    ): mixed {
+        $out = json_encode($data, $options);
+        if ($as_var) {
+            return $out;
+        }
+        echo $out;
+        return null;
+    }
+
+    /**
+     * Render a view template.
+     *
+     * @param string              $view   View name (without .php extension).
+     * @param array<string,mixed> $data   Variables to extract into the view.
+     * @param bool                $as_var If true, return rendered HTML instead of echoing.
+     * @return string|void
+     */
+    public function display(string $view, array $data = [], bool $as_var = false): mixed
+    {
+        return View::render($view, $data, $as_var);
+    }
+}
+
+
+// ── View ────────────────────────────────────────────────────────────────────
+
+/**
+ * Simple view renderer — loads a PHP template and extracts data into scope.
+ */
+class View
+{
+    /**
+     * @param string              $view   View name (without .php extension).
+     * @param array<string,mixed> $data   Variables to extract.
+     * @param bool                $as_var If true, capture and return output.
+     * @return string|void
+     */
+    public static function render(string $view, array $data = [], bool $as_var = false): mixed
+    {
+        return Loader::loadView($view . '.php', $data, $as_var);
+    }
+}
+
+
+// ── Request / Input ─────────────────────────────────────────────────────────
+
+/**
+ * Convenience accessors for the current request context.
+ */
+class Request
+{
+    /**
+     * Determine the controller class name from the calling file path.
+     */
+    public static function current_file(): ?string
+    {
+        $file = debug_backtrace()[1]['file'] ?? '';
+        $segments = explode('/', $file);
+        foreach ($segments as $segment) {
+            if (strtolower(substr($segment, -4)) === '.php') {
+                $class = substr($segment, 0, stripos($segment, '.php'));
+                return ucwords(strtolower($class));
+            }
+        }
+        return null;
+    }
+
+    /** Get the current method from the input. */
+    public static function method(): mixed
+    {
+        return Input::first();
+    }
+
+    /** Get all arguments after the first input segment. */
+    public static function args(): array
+    {
+        return Input::remainder_after_first();
+    }
+}
+
+/**
+ * Unified input abstraction — works for both URL query strings and CLI argv.
+ */
+class Input
+{
+    /** First argument. */
+    public static function first(): mixed
+    {
+        return self::allArgs(0);
+    }
+
+    /** Second argument. */
+    public static function second(): mixed
+    {
+        return self::allArgs(1);
+    }
+
+    /** Third argument. */
+    public static function third(): mixed
+    {
+        return self::allArgs(2);
+    }
+
+    /**
+     * All arguments after the first.
+     *
+     * @return array<int, mixed>
+     */
+    public static function remainder_after_first(): array
+    {
+        $args = self::allArgs();
+        return array_slice($args, 1);
+    }
+
+    /**
+     * Get all arguments, or a single argument by index.
+     *
+     * @param  int $index -1 for all, otherwise the 0-based index.
+     * @return mixed       Array of all args, a single arg, or false if not found.
+     */
+    public static function allArgs(int $index = -1): mixed
+    {
+        if (Context::isCLI()) {
+            $args = CLI::enumeratedArgs();
+        } else {
+            $args = URL::enumeratedArgs();
+        }
+
+        if ($index === -1) {
+            return $args;
+        }
+        return $args[$index] ?? false;
+    }
+}
+
+
+// ── Loader ──────────────────────────────────────────────────────────────────
+
+/**
+ * File loader for configuration and view templates.
+ */
+class Loader
+{
+    /**
+     * Load config/config.php and return the $_config array.
+     *
+     * @return array<string, mixed>
+     */
+    public static function loadConfig(): array
+    {
+        if (file_exists('config/config.php')) {
+            include_once 'config/config.php';
+            return $_config ?? [];
+        }
+        return [];
+    }
+
+    /**
+     * Load a view template, extracting data into its scope.
+     *
+     * @param string              $view  Filename relative to views/.
+     * @param array<string,mixed> $data  Variables to extract.
+     * @param bool                $asVar If true, capture output and return it.
+     * @return string|void
+     */
+    public static function loadView(string $view, array $data = [], bool $asVar = false): mixed
+    {
+        extract($data);
+
+        if ($asVar) {
+            ob_start();
+            include 'views/' . $view;
+            return ob_get_clean();
+        }
+        include 'views/' . $view;
+        return null;
+    }
+}
+
+
+// ── Router ──────────────────────────────────────────────────────────────────
+
+/**
+ * Maps incoming requests to controller/method pairs using config-based routes.
+ *
+ * URL pattern: index.php?/<controller>/<method>/arg1/arg2/...
+ * CLI pattern: php index.php <controller>/<method>/arg1/arg2/...
+ */
+class Router
+{
+    /** @var array<string, string> */
+    private static array $routes = [];
+
+    /**
+     * Load and cache routes from configuration.
+     *
+     * @return array<string, string>
+     */
+    public static function routes(): array
+    {
+        if (count(self::$routes) > 0) {
+            return self::$routes;
+        }
+        self::$routes = Config::forKey('_routes') ?? [];
+        return self::$routes;
+    }
+
+    /**
+     * Resolve a route key to [class, method] elements.
+     *
+     * If the key matches a configured route, split that route string.
+     * Otherwise, treat the directive segments as class/method directly.
+     *
+     * @param  string $key The first URL/CLI segment (route key).
+     * @return array{0: string, 1: string} [class, method]
+     */
+    public static function routeElementsForKey(string $key): array
+    {
+        $routes = self::routes();
+
+        if (isset($routes[$key])) {
+            $route = explode('/', ltrim($routes[$key], '/'));
+            // Ensure we always have at least [class, method]
+            return [$route[0], $route[1] ?? ''];
+        }
+
+        $directives = self::directive();
+        return [$directives[0] ?? '', $directives[1] ?? ''];
+    }
+
+    /**
+     * Get the raw directive segments from the request.
+     *
+     * @return string[]
+     */
+    public static function directive(): array
+    {
+        if (Context::isCLI()) {
+            $directive = CLI::firstArg() ?? '';
+        } else {
+            $directive = URL::firstArg() ?? '';
+        }
+        return explode('/', $directive);
+    }
+
+    /**
+     * Get the route key (first segment of the directive).
+     */
+    public static function key(): string
+    {
+        $directive = self::directive();
+        $key = $directive[0] ?? '';
+
+        // Fall back to the default route if no key provided
+        if ($key === '') {
+            $routes = self::routes();
+            $key = '__default';
+        }
+        return $key;
+    }
+
+    /** Resolve the controller class name. */
+    public static function getClass(): string
+    {
+        return self::routeElementsForKey(self::key())[0];
+    }
+
+    /** Resolve the controller method name. */
+    public static function getMethod(): string
+    {
+        return self::routeElementsForKey(self::key())[1];
+    }
+
+    /**
+     * Collect arguments — everything after controller/method in the directive.
+     *
+     * @return string[]
+     */
+    public static function getArgs(): array
+    {
+        $directive = self::directive();
+        // Segments 0=class, 1=method, 2+=args
+        return array_slice($directive, 2);
+    }
+}
+
+
+// ── URL ─────────────────────────────────────────────────────────────────────
+
+/**
+ * URL/HTTP request helpers.
+ */
+class URL
+{
+    /** Current request URI. */
+    public static function uri(): string
+    {
+        return $_SERVER['REQUEST_URI'] ?? '';
+    }
+
+    /** Full URL including protocol and host. */
+    public static function fullurl(): string
+    {
+        return self::protocol() . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . self::uri();
+    }
+
+    /** Whether the request is over HTTPS. */
+    public static function https(): bool
+    {
+        return !empty($_SERVER['HTTPS']);
+    }
+
+    /** Current protocol string. */
+    public static function protocol(): string
+    {
+        return self::https() ? 'https' : 'http';
+    }
+
+    /**
+     * Parse the query string into an associative array.
+     *
+     * @return array<string, string>
+     */
+    public static function args(): array
+    {
+        $q = ltrim($_SERVER['QUERY_STRING'] ?? '', '/');
+        parse_str($q, $out);
+        return $out;
+    }
+
+    /**
+     * Enumerate query-string arguments into a flat list.
+     *
+     * Key-only params become string entries; key=value pairs become single-element arrays.
+     *
+     * @return array<int, mixed>
+     */
+    public static function enumeratedArgs(): array
+    {
+        $args = self::args();
+        $out = [];
+        foreach ($args as $key => $arg) {
+            $out[] = ($arg !== '') ? [$key => $arg] : $key;
+        }
+        return $out;
+    }
+
+    /**
+     * First query-string argument (the route directive).
+     */
+    public static function firstArg(): string
+    {
+        $args = self::enumeratedArgs();
+        if (empty($args)) {
+            return '';
+        }
+        return trim($args[0], '/');
+    }
+}
+
+
+// ── CLI ─────────────────────────────────────────────────────────────────────
+
+/**
+ * CLI argument helpers.
+ */
+class CLI
+{
+    /**
+     * Get all argv entries, or a single one by index.
+     *
+     * @param  int $ndx -1 for all, otherwise the 0-based index.
+     * @return mixed
+     */
+    public static function args(int $ndx = -1): mixed
+    {
+        global $argv;
+        return ($ndx === -1) ? ($argv ?? []) : ($argv[$ndx] ?? null);
+    }
+
+    /**
+     * The first real argument (argv[1]), trimmed of slashes.
+     */
+    public static function firstArg(): ?string
+    {
+        $args = self::args();
+        if (count($args) > 1) {
+            return trim($args[1], '/');
+        }
+        return null;
+    }
+
+    /** The script filename (argv[0]). */
+    public static function file(): ?string
+    {
+        return self::args(0);
+    }
+
+    /**
+     * All arguments after the script name, as a flat list.
+     *
+     * @return string[]
+     */
+    public static function enumeratedArgs(): array
+    {
+        global $argv;
+        $all = $argv ?? [];
+        $len = count($all);
+        $args = [];
+        for ($i = 1; $i < $len; $i++) {
+            $args[] = $all[$i];
+        }
+        return $args;
+    }
+}
+
+
+// ── Model / Store ───────────────────────────────────────────────────────────
+
+/**
+ * Base object with KVC-style setter dispatch.
+ */
+class M2Object
+{
+    /**
+     * Set a property by calling its setter method (set<Key>).
+     *
+     * @param mixed  $value The value to set.
+     * @param string $key   The property name.
+     */
+    public function takeValueForKey(mixed $value, string $key): void
+    {
+        $setter = 'set' . ucwords(strtolower($key));
+
+        if (method_exists($this, $setter) && is_callable([$this, $setter])) {
+            $this->$setter($value);
+        }
+    }
+}
+
+/**
+ * Base store class — extend for different backends.
+ */
+class Store extends M2Object
+{
+}
+
+/**
+ * Simple JSON file-based key/value store.
+ *
+ * Data is stored in the data/ directory as <class>.json files.
+ */
+class JSONStore extends Store
+{
+    /** @var string Base directory for JSON data files. */
+    private static string $dataDir = 'data';
+
+    /**
+     * Fetch a record by class and identifier.
+     *
+     * @param  string $class      The data collection name.
+     * @param  string $identifier The record key.
+     * @return mixed  The stored value, or false if not found.
+     */
+    public static function fetch(string $class, string $identifier): mixed
+    {
+        $file = self::$dataDir . '/' . $class . '.json';
+        if (!file_exists($file)) {
+            return false;
+        }
+        $data = json_decode(file_get_contents($file), true);
+        return $data[$identifier] ?? false;
+    }
+
+    /**
+     * Store a record.
+     *
+     * @param string $class      The data collection name.
+     * @param string $identifier The record key.
+     * @param mixed  $data       The value to store.
+     */
+    public static function put(string $class, string $identifier, mixed $data): void
+    {
+        $file = self::$dataDir . '/' . $class . '.json';
+        $dstore = [];
+        if (file_exists($file)) {
+            $dstore = json_decode(file_get_contents($file), true) ?? [];
+        }
+        $dstore[$identifier] = $data;
+
+        file_put_contents(
+            $file,
+            json_encode($dstore, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK | JSON_PRETTY_PRINT)
+        );
+    }
+
+    /**
+     * Append a timestamped log entry.
+     *
+     * @param string $class      The log category.
+     * @param string $identifier The log key.
+     * @param mixed  $data       Scalar or array data to log.
+     */
+    public static function log(string $class, string $identifier, mixed $data): void
+    {
+        if (!is_scalar($data)) {
+            $data = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK);
+        }
+
+        $buf = time() . ' | ' . $class . '.' . $identifier . ' | ' . $data . "\n";
+        $logFile = self::$dataDir . '/log';
+
+        $handle = fopen($logFile, 'a');
+        if ($handle === false) {
+            die('Cannot open file: ' . $logFile);
+        }
+        fwrite($handle, $buf);
+        fclose($handle);
+    }
+}
+
+
+// ── Debug Helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Extract a short file context (parent dir + filename) from a full path.
+ *
+ * @param  string $path Absolute file path.
+ * @return string
+ */
+function file_context_from_path(string $path): string
+{
+    $segments = explode(DIRECTORY_SEPARATOR, $path);
+    $count = count($segments);
+    $context = '';
+    for ($i = max(0, $count - 2); $i < $count; $i++) {
+        $context .= DIRECTORY_SEPARATOR . $segments[$i];
+    }
+    return $context;
+}
+
+/**
+ * Build a caller-context string (or array) from the debug backtrace.
+ *
+ * @param  bool $asString If true, return a formatted string; otherwise an array.
+ * @return string|array<string, mixed>
+ */
+function debug_context(bool $asString = true): string|array
+{
+    $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+    $caller = $backtrace[1] ?? [];
+
+    $data = [
+        'cfile_context' => file_context_from_path($caller['file'] ?? ''),
+        'cclass'        => $caller['class'] ?? '',
+        'cfunction'     => $caller['function'] ?? '',
+        'ctype'         => $caller['type'] ?? '',
+        'cline'         => $caller['line'] ?? 0,
+    ];
+
+    if (!$asString) {
+        return $data;
+    }
+
+    return $data['cclass'] . $data['ctype'] . $data['cfunction']
+        . ' [' . $data['cfile_context'] . ':' . $data['cline'] . ']';
+}
+
+/**
+ * Pretty-print a value with caller context (debug helper).
+ *
+ * @param mixed $object Value to dump.
+ */
+function p(mixed $object): void
+{
+    echo "<pre>\n" . debug_context() . " \n\n";
+    print_r($object);
+    echo "\n__________________________________________________________________\n";
+    echo "</pre>";
+}

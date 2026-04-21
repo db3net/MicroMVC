@@ -1,0 +1,17 @@
+# Dependencies
+/vendor/
+
+# Data files
+/data/*.json
+/data/log
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

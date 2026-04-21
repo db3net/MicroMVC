@@ -166,6 +166,59 @@ JSONStore::log('audit', 'login', ['user' => 'user_42', 'ip' => '10.0.0.1']);
 
 Data is stored as `data/users.json`, `data/audit.json`, etc. — human-readable and easy to inspect.
 
+## Containers & Microservices
+
+MicroMVC is a natural fit for containerized deployments. Zero dependencies means no `composer install`, no vendor directory, and no build step. Your Dockerfile is trivial and your image is tiny.
+
+### Dockerfile
+
+```dockerfile
+FROM php:8.3-alpine
+
+COPY . /app
+WORKDIR /app
+
+EXPOSE 8080
+
+CMD ["php", "-S", "0.0.0.0:8080", "-t", "public"]
+```
+
+Build and run:
+
+```bash
+docker build -t my-service .
+docker run -p 8080:8080 my-service
+```
+
+The resulting image is ~30MB. Cold starts are near-instant.
+
+### Why this works for microservices
+
+- **Minimal attack surface** — no framework dependencies to patch, no supply chain risk
+- **Fast startup** — no autoloader to build, no config cache to warm, no service container to boot
+- **Small images** — `php:alpine` + your code, nothing else
+- **One service, one concern** — each container gets its own MicroMVC app with just the controllers it needs
+- **Easy to replicate** — spin up a new microservice by copying the skeleton and adding a controller
+
+Each microservice is just a Dockerfile, a config file, and a few controllers. No shared framework state, no dependency conflicts between services, no monorepo coordination.
+
+### Docker Compose example
+
+```yaml
+services:
+  users-api:
+    build: ./services/users
+    ports: ["8081:8080"]
+  orders-api:
+    build: ./services/orders
+    ports: ["8082:8080"]
+  notifications:
+    build: ./services/notifications
+    ports: ["8083:8080"]
+```
+
+Each service is an independent MicroMVC app with its own routes, controllers, and data store.
+
 ## Configuration Reference
 
 `config/config.php` returns an array with these keys:

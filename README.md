@@ -19,6 +19,7 @@ cd MicroMVC
 ### 2. Create a controller
 
 ```php
+<?php
 // controllers/hello.php
 class hello extends Controller
 {
@@ -32,6 +33,7 @@ class hello extends Controller
         $this->json_output(['hello' => $name]);
     }
 }
+?>
 ```
 
 ### 3. Run it

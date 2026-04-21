@@ -11,4 +11,3 @@ chdir(dirname(__DIR__));
 require_once 'src/MicroMVC.php';
 
 Context::run();
-();

@@ -299,6 +299,30 @@ services:
 
 Each service is an independent MicroMVC app with its own routes, controllers, and data store.
 
+## Security
+
+MicroMVC includes baseline protections against common attacks:
+
+- **Controller name validation** — only alphanumeric class/method names are accepted; path traversal attempts like `../../etc/passwd` are rejected
+- **Framework class blocking** — internal classes (`Config`, `Router`, `Loader`, etc.) cannot be instantiated via URL
+- **Method access control** — underscore-prefixed methods, magic methods (`__construct`, `__toString`, etc.), and base `Controller` internals are not callable from the URL
+- **View path traversal protection** — `realpath()` validation ensures views can only be loaded from the `views/` directory
+- **JSONStore path sanitization** — collection names are stripped to `[a-zA-Z0-9_-]` to prevent file path injection
+- **Controller type checking** — only classes extending `Controller` can be dispatched
+
+### What's NOT included
+
+MicroMVC is a micro-framework — these are your responsibility:
+
+- **Output escaping** — use `htmlspecialchars()` in your views to prevent XSS
+- **CSRF protection** — add token validation for state-changing forms
+- **Authentication / authorization** — implement in your controllers or a base controller
+- **Rate limiting** — handle at the web server or load balancer level
+- **Input validation** — validate and sanitize user input in your controllers
+- **HTTPS** — configure TLS at the web server level
+
+A good pattern is to create a `BaseController` that extends `Controller` with auth checks, then extend that for protected routes.
+
 ## Configuration Reference
 
 `config/config.php` returns an array with these keys:

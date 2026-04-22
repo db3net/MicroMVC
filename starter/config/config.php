@@ -23,6 +23,19 @@ $_config = [
         '__404'     => 'notfound/index',
     ],
 
+    // ── Storage ──────────────────────────────────────────────────────────────
+    //
+    // By default, MicroMVC uses a JSON flat-file store (the data/ directory).
+    // JSONModel works out of the box with zero configuration — no database
+    // needed. Just extend JSONModel and start saving.
+    //
+    // To use MySQL or PostgreSQL instead, extend MySQLModel or PGModel and
+    // configure a named connection below.
+
+    '_database' => [
+        'type' => 'file',   // 'file' = JSON flat-file store (default)
+    ],
+
     // ── Database Connections ────────────────────────────────────────────────
     //
     // Named connections used by MySQLModel and PGModel. Each key is a

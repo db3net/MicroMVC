@@ -2,7 +2,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // notfound — 404 controller
 // Author: dblack
-// Email: dblack@merchante.com
+// Email: dblack@db3.net
 // Copyright (c) 2026 db3.net. All rights reserved.
 // ──────────────────────────────────────────────────────────────────────────────
 

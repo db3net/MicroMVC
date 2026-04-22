@@ -1,6 +1,6 @@
 # MicroMVC
 
-A radically lightweight, single-file PHP micro-framework. The entire MVC stack — routing, controllers, views, models, and a JSON file-store — in one file with zero dependencies.
+A radically lightweight, single-file PHP micro-framework. The entire MVC stack — routing, controllers, views, models, and a JSON file-store — in one file with zero dependencies making this possibly the lightest PHP MVC framework.
 
 - **~20KB** on disk. The whole framework.
 - **No `composer install`**. No vendor directory. No lock files.

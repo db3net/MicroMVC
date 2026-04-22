@@ -117,17 +117,23 @@ myapp/
 
 ## Repository Structure
 
-This repo contains both the framework source and the starter project:
+This repo contains both the framework source and a working app:
 
 ```
 MicroMVC/                  # Framework development repo
 ├── src/MicroMVC.php       # Framework source
-├── starter/               # Starter project (what users install)
+├── config/                # App configuration
+├── controllers/           # Example controllers
+├── models/                # Example models
+├── views/                 # Example views
+├── public/                # Web entry point
 ├── tests/                 # Framework test suite
 ├── docs/                  # Documentation
 ├── install.sh             # One-line installer
 └── README.md
 ```
+
+The installer (`install.sh`) copies the app files directly from this repo — no separate starter directory to maintain.
 
 ## License
 

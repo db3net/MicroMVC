@@ -23,8 +23,18 @@ fi
 # Clone into temp dir (shallow, no history)
 git clone --depth 1 --quiet "$REPO" "$TEMP_DIR"
 
-# Copy starter to destination
-cp -r "$TEMP_DIR/starter" "$APP_NAME"
+# Copy only the app files — skip dev/repo artifacts
+mkdir -p "$APP_NAME"
+cp -r "$TEMP_DIR/src"         "$APP_NAME/src"
+cp -r "$TEMP_DIR/config"      "$APP_NAME/config"
+cp -r "$TEMP_DIR/controllers" "$APP_NAME/controllers"
+cp -r "$TEMP_DIR/models"      "$APP_NAME/models"
+cp -r "$TEMP_DIR/public"      "$APP_NAME/public"
+cp -r "$TEMP_DIR/views"       "$APP_NAME/views"
+mkdir -p "$APP_NAME/data"
+cp "$TEMP_DIR/Dockerfile"         "$APP_NAME/Dockerfile"
+cp "$TEMP_DIR/Dockerfile.alpine"  "$APP_NAME/Dockerfile.alpine"
+cp "$TEMP_DIR/.dockerignore"      "$APP_NAME/.dockerignore"
 
 # Clean up
 rm -rf "$TEMP_DIR"

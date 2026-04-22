@@ -23,64 +23,65 @@ $_config = [
         '__404'     => 'notfound/index',
     ],
 
-    // ── Storage ──────────────────────────────────────────────────────────────
+    // ── Named Connections ───────────────────────────────────────────────────
     //
-    // By default, MicroMVC uses a JSON flat-file store (the data/ directory).
-    // JSONModel works out of the box with zero configuration — no database
-    // needed. Just extend JSONModel and start saving.
+    // All models use named connections. Each key is a connection name that
+    // models reference via connectionName(). Supported drivers:
     //
-    // To use MySQL or PostgreSQL instead, extend MySQLModel or PGModel and
-    // configure a named connection below.
-
-    '_database' => [
-        'type' => 'file',   // 'file' = JSON flat-file store (default)
-    ],
-
-    // ── Database Connections ────────────────────────────────────────────────
+    //   'file'   — JSON flat-file store (JSONModel)
+    //   'mysql'  — MySQL / MariaDB      (MySQLModel)
+    //   'pgsql'  — PostgreSQL            (PGModel)
     //
-    // Named connections used by MySQLModel and PGModel. Each key is a
-    // connection name that models reference via connectionName().
+    // Every model defaults to the 'default' connection unless it overrides
+    // connectionName(). The pattern is the same for all model types:
     //
-    // Supported drivers: 'mysql', 'pgsql'
-    //
-    // Models use 'default' unless they override connectionName():
+    //   class User extends JSONModel {
+    //       protected static function connectionName(): string { return 'default'; }
+    //       ...
+    //   }
     //
     //   class Order extends MySQLModel {
-    //       protected static function connectionName(): string { return 'default'; }
-    //       protected static function table(): string { return 'orders'; }
+    //       protected static function connectionName(): string { return 'orders_db'; }
     //       ...
     //   }
-    //
-    //   class Report extends PGModel {
-    //       protected static function connectionName(): string { return 'analytics'; }
-    //       protected static function table(): string { return 'reports'; }
-    //       ...
-    //   }
-    //
-    // Uncomment and edit the examples below to enable database connections.
 
-    // 'connections' => [
-    //
-    //     // Default MySQL connection
-    //     'default' => [
-    //         'driver'   => 'mysql',
-    //         'host'     => '127.0.0.1',
-    //         'port'     => 3306,
-    //         'dbname'   => 'myapp',
-    //         'user'     => 'root',
-    //         'password' => '',
-    //     ],
-    //
-    //     // PostgreSQL analytics database
-    //     'analytics' => [
-    //         'driver'   => 'pgsql',
-    //         'host'     => '127.0.0.1',
-    //         'port'     => 5432,
-    //         'dbname'   => 'analytics',
-    //         'user'     => 'postgres',
-    //         'password' => '',
-    //     ],
-    //
-    // ],
+    'connections' => [
+
+        // JSON flat-file store — data lives in the data/ directory.
+        // This is the default. No database needed.
+        'default' => [
+            'driver' => 'file',
+            'path'   => 'data',       // directory for .json files
+        ],
+
+        // ── Additional connections (uncomment to enable) ────────────────
+
+        // // Second file store — e.g. for logs in a separate directory
+        // 'logs' => [
+        //     'driver' => 'file',
+        //     'path'   => 'data/logs',
+        // ],
+
+        // // MySQL connection
+        // 'mysql_main' => [
+        //     'driver'   => 'mysql',
+        //     'host'     => '127.0.0.1',
+        //     'port'     => 3306,
+        //     'dbname'   => 'myapp',
+        //     'user'     => 'root',
+        //     'password' => '',
+        // ],
+
+        // // PostgreSQL connection
+        // 'analytics' => [
+        //     'driver'   => 'pgsql',
+        //     'host'     => '127.0.0.1',
+        //     'port'     => 5432,
+        //     'dbname'   => 'analytics',
+        //     'user'     => 'postgres',
+        //     'password' => '',
+        // ],
+
+    ],
 
 ];

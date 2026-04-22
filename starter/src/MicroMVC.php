@@ -705,13 +705,11 @@ class Store extends M2Object
 /**
  * Simple JSON file-based key/value store.
  *
- * Data is stored in the data/ directory as <class>.json files.
+ * Data is stored as <collection>.json files in a configurable directory.
+ * The directory is resolved from a named connection via DB::dataDir().
  */
 class JSONStore extends Store
 {
-    /** @var string Base directory for JSON data files. */
-    private static string $dataDir = 'data';
-
     /**
      * Sanitize a collection name to prevent path traversal.
      */
@@ -725,11 +723,12 @@ class JSONStore extends Store
      *
      * @param  string $class      The data collection name.
      * @param  string $identifier The record key.
+     * @param  string $dataDir    Base directory for data files.
      * @return mixed  The stored value, or false if not found.
      */
-    public static function fetch(string $class, string $identifier): mixed
+    public static function fetch(string $class, string $identifier, string $dataDir = 'data'): mixed
     {
-        $file = self::$dataDir . '/' . self::safeName($class) . '.json';
+        $file = $dataDir . '/' . self::safeName($class) . '.json';
         if (!file_exists($file)) {
             return false;
         }
@@ -743,10 +742,11 @@ class JSONStore extends Store
      * @param string $class      The data collection name.
      * @param string $identifier The record key.
      * @param mixed  $data       The value to store.
+     * @param string $dataDir    Base directory for data files.
      */
-    public static function put(string $class, string $identifier, mixed $data): void
+    public static function put(string $class, string $identifier, mixed $data, string $dataDir = 'data'): void
     {
-        $file = self::$dataDir . '/' . self::safeName($class) . '.json';
+        $file = $dataDir . '/' . self::safeName($class) . '.json';
         $dstore = [];
         if (file_exists($file)) {
             $dstore = json_decode(file_get_contents($file), true) ?? [];
@@ -765,15 +765,16 @@ class JSONStore extends Store
      * @param string $class      The log category.
      * @param string $identifier The log key.
      * @param mixed  $data       Scalar or array data to log.
+     * @param string $dataDir    Base directory for data files.
      */
-    public static function log(string $class, string $identifier, mixed $data): void
+    public static function log(string $class, string $identifier, mixed $data, string $dataDir = 'data'): void
     {
         if (!is_scalar($data)) {
             $data = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK);
         }
 
         $buf = time() . ' | ' . self::safeName($class) . '.' . $identifier . ' | ' . $data . "\n";
-        $logFile = self::$dataDir . '/log';
+        $logFile = $dataDir . '/log';
 
         $handle = fopen($logFile, 'a');
         if ($handle === false) {
@@ -850,17 +851,40 @@ function p(mixed $object): void
 /**
  * DB — Named connection registry.
  *
- * Lazily creates and caches PDO instances by connection name. Connection
+ * Manages both PDO database connections and file-store paths. Connection
  * configs are defined in config/config.php under the 'connections' key.
  *
  * Usage:
- *   $pdo = DB::connection('default');
- *   $pdo = DB::connection('analytics');
+ *   $pdo = DB::connection('default');       // MySQL or PostgreSQL
+ *   $dir = DB::dataDir('default');          // JSON file-store path
  */
 class DB
 {
     /** @var array<string, PDO> */
     private static array $pool = [];
+
+    /**
+     * Get the data directory for a named file-store connection.
+     *
+     * @param  string $name Connection name from config 'connections' array.
+     * @return string The data directory path.
+     * @throws RuntimeException If the connection is not configured or not a file driver.
+     */
+    public static function dataDir(string $name = 'default'): string
+    {
+        $all = Config::forKey('connections') ?? [];
+        $cfg = $all[$name] ?? null;
+
+        if ($cfg === null) {
+            throw new RuntimeException("DB connection '{$name}' is not configured.");
+        }
+
+        if (($cfg['driver'] ?? '') !== 'file') {
+            throw new RuntimeException("DB connection '{$name}' is not a file-store.");
+        }
+
+        return $cfg['path'] ?? 'data';
+    }
 
     /**
      * Get a PDO instance for a named connection.
@@ -926,7 +950,14 @@ abstract class Model extends M2Object
 /**
  * JSONModel — Model backed by the built-in JSONStore.
  *
- * Zero-config, file-based persistence. Great for prototyping and small apps.
+ * Uses named connections from config/config.php 'connections' key.
+ * Override connectionName() to use a specific named connection:
+ *
+ *   class AuditLog extends JSONModel {
+ *       protected static function connectionName(): string { return 'logs'; }
+ *       protected static function storeName(): string { return 'audit'; }
+ *       // ...
+ *   }
  */
 abstract class JSONModel extends Model
 {
@@ -935,14 +966,23 @@ abstract class JSONModel extends Model
     abstract protected function toArray(): array;
     abstract protected static function fromArray(array $data): static;
 
+    /** Override to use a different named connection. */
+    protected static function connectionName(): string { return 'default'; }
+
+    /** Resolve the data directory from the named connection. */
+    protected static function dataDir(): string
+    {
+        return DB::dataDir(static::connectionName());
+    }
+
     public function save(): void
     {
-        JSONStore::put(static::storeName(), $this->identifier(), $this->toArray());
+        JSONStore::put(static::storeName(), $this->identifier(), $this->toArray(), static::dataDir());
     }
 
     public static function find(string $identifier): ?static
     {
-        $data = JSONStore::fetch(static::storeName(), $identifier);
+        $data = JSONStore::fetch(static::storeName(), $identifier, static::dataDir());
         if (!$data) {
             return null;
         }
@@ -951,7 +991,7 @@ abstract class JSONModel extends Model
 
     public static function delete(string $identifier): void
     {
-        JSONStore::put(static::storeName(), $identifier, null);
+        JSONStore::put(static::storeName(), $identifier, null, static::dataDir());
     }
 }
 

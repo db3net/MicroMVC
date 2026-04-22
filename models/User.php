@@ -9,8 +9,19 @@
 //
 // This is a sample model to show how MicroMVC models work.
 //
-// JSONModel stores data as JSON files in the data/ directory — no database
-// needed. To switch to MySQL or PostgreSQL, just change the parent class:
+// JSONModel stores data as JSON files — no database needed. The data
+// directory is resolved from a named connection in config/config.php:
+//
+//   'connections' => [
+//       'default' => ['driver' => 'file', 'path' => 'data'],
+//   ]
+//
+// All models use the 'default' connection unless they override
+// connectionName(). To point a model at a different store:
+//
+//   protected static function connectionName(): string { return 'logs'; }
+//
+// To switch to MySQL or PostgreSQL, change the parent class:
 //
 //   class User extends MySQLModel { ... }
 //   class User extends PGModel   { ... }
@@ -41,6 +52,11 @@ class User extends JSONModel
         $this->name  = $name;
         $this->email = $email;
     }
+
+    // ── Connection ──────────────────────────────────────────────────────────
+
+    /** Which named connection to use. Defaults to 'default'. */
+    protected static function connectionName(): string { return 'default'; }
 
     // ── Required by JSONModel ───────────────────────────────────────────────
 

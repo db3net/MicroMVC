@@ -13,7 +13,12 @@ APP_NAME="${1:-myapp}"
 REPO="https://github.com/db3net/MicroMVC.git"
 TEMP_DIR=$(mktemp -d)
 
-echo "🚀 Creating MicroMVC project: ${APP_NAME}"
+echo "🚀 Creating MicroMVC project"
+if [ -t 0 ]; then
+    printf "   Project name [%s]: " "$APP_NAME"
+    read -r input
+    APP_NAME="${input:-$APP_NAME}"
+fi
 
 # Clone into temp dir (shallow, no history)
 git clone --depth 1 --quiet "$REPO" "$TEMP_DIR"

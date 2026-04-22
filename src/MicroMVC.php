@@ -845,6 +845,69 @@ function p(mixed $object): void
 }
 
 
+// ── Database Connection Registry ────────────────────────────────────────────
+
+/**
+ * DB — Named connection registry.
+ *
+ * Lazily creates and caches PDO instances by connection name. Connection
+ * configs are defined in config/config.php under the 'connections' key.
+ *
+ * Usage:
+ *   $pdo = DB::connection('default');
+ *   $pdo = DB::connection('analytics');
+ */
+class DB
+{
+    /** @var array<string, PDO> */
+    private static array $pool = [];
+
+    /**
+     * Get a PDO instance for a named connection.
+     *
+     * @param  string $name Connection name from config 'connections' array.
+     * @return PDO
+     * @throws RuntimeException If the connection is not configured.
+     */
+    public static function connection(string $name = 'default'): PDO
+    {
+        if (isset(self::$pool[$name])) {
+            return self::$pool[$name];
+        }
+
+        $all = Config::forKey('connections') ?? [];
+        $cfg = $all[$name] ?? null;
+
+        if ($cfg === null) {
+            throw new RuntimeException("DB connection '{$name}' is not configured.");
+        }
+
+        $driver = $cfg['driver'] ?? 'mysql';
+        $host   = $cfg['host']   ?? '127.0.0.1';
+        $port   = $cfg['port']   ?? ($driver === 'pgsql' ? 5432 : 3306);
+        $dbname = $cfg['dbname'] ?? '';
+
+        $dsn = match ($driver) {
+            'pgsql' => "pgsql:host={$host};port={$port};dbname={$dbname}",
+            default => "mysql:host={$host};port={$port};dbname={$dbname};charset=utf8mb4",
+        };
+
+        self::$pool[$name] = new PDO($dsn, $cfg['user'] ?? '', $cfg['password'] ?? '', [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+
+        return self::$pool[$name];
+    }
+
+    /** Close all cached connections. */
+    public static function reset(): void
+    {
+        self::$pool = [];
+    }
+}
+
+
 // ── Models ──────────────────────────────────────────────────────────────────
 
 /**
@@ -895,40 +958,28 @@ abstract class JSONModel extends Model
 /**
  * MySQLModel — Model backed by a MySQL/MariaDB connection via PDO.
  *
- * Configure credentials in config/config.php under the 'mysql' key:
- *   'mysql' => [
- *       'host' => '127.0.0.1',
- *       'port' => 3306,
- *       'dbname' => 'myapp',
- *       'user' => 'root',
- *       'password' => '',
- *   ]
+ * Uses named connections from config/config.php 'connections' key.
+ * Override connectionName() to use a specific named connection:
+ *
+ *   class Order extends MySQLModel {
+ *       protected static function connectionName(): string { return 'orders_db'; }
+ *       protected static function table(): string { return 'orders'; }
+ *       // ...
+ *   }
  */
 abstract class MySQLModel extends Model
 {
-    private static ?PDO $pdo = null;
-
     abstract protected static function table(): string;
     abstract protected static function primaryKey(): string;
     abstract protected function toRow(): array;
     abstract protected static function fromRow(array $row): static;
 
+    /** Override to use a different named connection. */
+    protected static function connectionName(): string { return 'default'; }
+
     protected static function connection(): PDO
     {
-        if (self::$pdo === null) {
-            $cfg = Config::forKey('mysql');
-            $dsn = sprintf(
-                'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
-                $cfg['host'] ?? '127.0.0.1',
-                $cfg['port'] ?? 3306,
-                $cfg['dbname'] ?? ''
-            );
-            self::$pdo = new PDO($dsn, $cfg['user'] ?? '', $cfg['password'] ?? '', [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-        }
-        return self::$pdo;
+        return DB::connection(static::connectionName());
     }
 
     public function save(): void
@@ -970,40 +1021,28 @@ abstract class MySQLModel extends Model
 /**
  * PGModel — Model backed by a PostgreSQL connection via PDO.
  *
- * Configure credentials in config/config.php under the 'pgsql' key:
- *   'pgsql' => [
- *       'host' => '127.0.0.1',
- *       'port' => 5432,
- *       'dbname' => 'myapp',
- *       'user' => 'postgres',
- *       'password' => '',
- *   ]
+ * Uses named connections from config/config.php 'connections' key.
+ * Override connectionName() to use a specific named connection:
+ *
+ *   class Report extends PGModel {
+ *       protected static function connectionName(): string { return 'analytics'; }
+ *       protected static function table(): string { return 'reports'; }
+ *       // ...
+ *   }
  */
 abstract class PGModel extends Model
 {
-    private static ?PDO $pdo = null;
-
     abstract protected static function table(): string;
     abstract protected static function primaryKey(): string;
     abstract protected function toRow(): array;
     abstract protected static function fromRow(array $row): static;
 
+    /** Override to use a different named connection. */
+    protected static function connectionName(): string { return 'default'; }
+
     protected static function connection(): PDO
     {
-        if (self::$pdo === null) {
-            $cfg = Config::forKey('pgsql');
-            $dsn = sprintf(
-                'pgsql:host=%s;port=%d;dbname=%s',
-                $cfg['host'] ?? '127.0.0.1',
-                $cfg['port'] ?? 5432,
-                $cfg['dbname'] ?? ''
-            );
-            self::$pdo = new PDO($dsn, $cfg['user'] ?? '', $cfg['password'] ?? '', [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-        }
-        return self::$pdo;
+        return DB::connection(static::connectionName());
     }
 
     public function save(): void

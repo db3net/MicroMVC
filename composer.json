@@ -12,7 +12,22 @@
     "require": {
         "php": ">=8.1"
     },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
     "autoload": {
         "files": ["src/MicroMVC.php"]
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite Unit",
+        "test:integration": "phpunit --testsuite Integration",
+        "test:db:up": "docker compose -f docker-compose.test.yml up -d --wait",
+        "test:db:down": "docker compose -f docker-compose.test.yml down -v",
+        "test:all": [
+            "@test:db:up",
+            "@test",
+            "@test:db:down"
+        ]
     }
 }

@@ -9,7 +9,7 @@ A simple key/value store backed by JSON files in the `data/` directory. No datab
 JSONStore::put('users', 'user_42', ['name' => 'David', 'role' => 'admin']);
 
 // Retrieve it
-$user = JSONStore::fetch('users', 'user_42');
+$user = JSONStore::find('users', 'user_42');
 // → ['name' => 'David', 'role' => 'admin']
 
 // Append to a log file

@@ -17,7 +17,7 @@ class users extends Controller
 
     public function show(string $id = ''): void
     {
-        $this->json_output(['user_id' => $id]);
+        $this->jsonOutput(['user_id' => $id]);
     }
 }
 ```
@@ -28,8 +28,8 @@ class users extends Controller
 |---|---|
 | `$this->display('view', $data)` | Render a PHP view template |
 | `$this->display('view', $data, true)` | Render and return as string |
-| `$this->json_output($data)` | Echo JSON response |
-| `$this->json_output($data, true)` | Return JSON as string |
+| `$this->jsonOutput($data)` | Echo JSON response |
+| `$this->jsonOutput($data, true)` | Return JSON as string |
 
 ## Views
 

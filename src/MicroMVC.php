@@ -83,7 +83,7 @@ class Context
 
         // Block access to framework internals
         $reserved = ['Config', 'Context', 'Controller', 'View', 'Request',
-            'Input', 'Loader', 'Router', 'URL', 'CLI', 'M2Object', 'Store', 'JSONStore',
+            'Input', 'Loader', 'Router', 'URL', 'CLI', 'M2DataObject', 'Store', 'JSONStore',
             'Model', 'JSONModel', 'MySQLModel', 'PGModel'];
         if (in_array($class, $reserved, true)) {
             self::abort(403, 'Forbidden');
@@ -148,7 +148,7 @@ class Controller
     public function _call(string $method, array $args = []): void
     {
         // Block internal/magic methods and base Controller methods
-        $blocked = ['_call', 'output', 'json_output', 'display', '__construct',
+        $blocked = ['_call', 'output', 'jsonOutput', 'display', '__construct',
             '__destruct', '__call', '__get', '__set', '__toString'];
         if (str_starts_with($method, '_') || in_array($method, $blocked, true)) {
             echo "Method named: '{$method}' is not accessible";
@@ -174,7 +174,7 @@ class Controller
      * @param string $type   Output type (currently only 'json').
      * @param mixed  $data   Data to encode.
      * @param string $view   Unused — reserved for future output types.
-     * @param bool   $as_var If true, return the string instead of echoing.
+     * @param bool   $asVar If true, return the string instead of echoing.
      * @param int    $options json_encode option flags.
      * @return string|void
      */
@@ -182,27 +182,27 @@ class Controller
         string $type = 'json',
         mixed $data = '',
         string $view = '',
-        bool $as_var = false,
+        bool $asVar = false,
         int $options = JSON_NUMERIC_CHECK | JSON_UNESCAPED_SLASHES
     ): mixed {
-        return $this->json_output($data, $as_var, $options);
+        return $this->jsonOutput($data, $asVar, $options);
     }
 
     /**
      * Encode data as JSON and echo or return it.
      *
      * @param mixed $data    Data to encode.
-     * @param bool  $as_var  If true, return the JSON string.
+     * @param bool  $asVar  If true, return the JSON string.
      * @param int   $options json_encode option flags.
      * @return string|void
      */
-    public function json_output(
+    public function jsonOutput(
         mixed $data,
-        bool $as_var = false,
+        bool $asVar = false,
         int $options = JSON_NUMERIC_CHECK | JSON_UNESCAPED_SLASHES
     ): mixed {
         $out = json_encode($data, $options);
-        if ($as_var) {
+        if ($asVar) {
             return $out;
         }
         echo $out;
@@ -214,12 +214,12 @@ class Controller
      *
      * @param string              $view   View name (without .php extension).
      * @param array<string,mixed> $data   Variables to extract into the view.
-     * @param bool                $as_var If true, return rendered HTML instead of echoing.
+     * @param bool                $asVar If true, return rendered HTML instead of echoing.
      * @return string|void
      */
-    public function display(string $view, array $data = [], bool $as_var = false): mixed
+    public function display(string $view, array $data = [], bool $asVar = false): mixed
     {
-        return View::render($view, $data, $as_var);
+        return View::render($view, $data, $asVar);
     }
 }
 
@@ -234,12 +234,12 @@ class View
     /**
      * @param string              $view   View name (without .php extension).
      * @param array<string,mixed> $data   Variables to extract.
-     * @param bool                $as_var If true, capture and return output.
+     * @param bool                $asVar If true, capture and return output.
      * @return string|void
      */
-    public static function render(string $view, array $data = [], bool $as_var = false): mixed
+    public static function render(string $view, array $data = [], bool $asVar = false): mixed
     {
-        return Loader::loadView($view . '.php', $data, $as_var);
+        return Loader::loadView($view . '.php', $data, $asVar);
     }
 }
 
@@ -254,7 +254,7 @@ class Request
     /**
      * Determine the controller class name from the calling file path.
      */
-    public static function current_file(): ?string
+    public static function currentFile(): ?string
     {
         $file = debug_backtrace()[1]['file'] ?? '';
         $segments = explode('/', $file);
@@ -276,7 +276,7 @@ class Request
     /** Get all arguments after the first input segment. */
     public static function args(): array
     {
-        return Input::remainder_after_first();
+        return Input::remainderAfterFirst();
     }
 }
 
@@ -308,7 +308,7 @@ class Input
      *
      * @return array<int, mixed>
      */
-    public static function remainder_after_first(): array
+    public static function remainderAfterFirst(): array
     {
         $args = self::allArgs();
         return array_slice($args, 1);
@@ -513,7 +513,7 @@ class URL
     }
 
     /** Full URL including protocol and host. */
-    public static function fullurl(): string
+    public static function fullUrl(): string
     {
         return self::protocol() . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . self::uri();
     }
@@ -677,7 +677,7 @@ class CLI
 /**
  * Base object with KVC-style setter dispatch.
  */
-class M2Object
+class M2DataObject
 {
     /**
      * Set a property by calling its setter method (set<Key>).
@@ -698,7 +698,7 @@ class M2Object
 /**
  * Base store class — extend for different backends.
  */
-class Store extends M2Object
+class Store extends M2DataObject
 {
 }
 
@@ -719,14 +719,14 @@ class JSONStore extends Store
     }
 
     /**
-     * Fetch a record by class and identifier.
+     * Find a record by class and identifier.
      *
      * @param  string $class      The data collection name.
      * @param  string $identifier The record key.
      * @param  string $dataDir    Base directory for data files.
      * @return mixed  The stored value, or false if not found.
      */
-    public static function fetch(string $class, string $identifier, string $dataDir = 'data'): mixed
+    public static function find(string $class, string $identifier, string $dataDir = 'data'): mixed
     {
         $file = $dataDir . '/' . self::safeName($class) . '.json';
         if (!file_exists($file)) {
@@ -794,7 +794,7 @@ class JSONStore extends Store
  * @param  string $path Absolute file path.
  * @return string
  */
-function file_context_from_path(string $path): string
+function fileContextFromPath(string $path): string
 {
     $segments = explode(DIRECTORY_SEPARATOR, $path);
     $count = count($segments);
@@ -811,13 +811,13 @@ function file_context_from_path(string $path): string
  * @param  bool $asString If true, return a formatted string; otherwise an array.
  * @return string|array<string, mixed>
  */
-function debug_context(bool $asString = true): string|array
+function debugContext(bool $asString = true): string|array
 {
     $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
     $caller = $backtrace[1] ?? [];
 
     $data = [
-        'cfile_context' => file_context_from_path($caller['file'] ?? ''),
+        'cfile_context' => fileContextFromPath($caller['file'] ?? ''),
         'cclass'        => $caller['class'] ?? '',
         'cfunction'     => $caller['function'] ?? '',
         'ctype'         => $caller['type'] ?? '',
@@ -839,7 +839,7 @@ function debug_context(bool $asString = true): string|array
  */
 function p(mixed $object): void
 {
-    echo "<pre>\n" . debug_context() . " \n\n";
+    echo "<pre>\n" . debugContext() . " \n\n";
     print_r($object);
     echo "\n__________________________________________________________________\n";
     echo "</pre>";
@@ -940,7 +940,7 @@ class DB
  * Subclasses must implement the storage backend methods.
  * See JSONModel, MySQLModel, and PGModel for concrete implementations.
  */
-abstract class Model extends M2Object
+abstract class Model extends M2DataObject
 {
     abstract public function save(): void;
     abstract public static function find(string $identifier): ?static;
@@ -982,7 +982,7 @@ abstract class JSONModel extends Model
 
     public static function find(string $identifier): ?static
     {
-        $data = JSONStore::fetch(static::storeName(), $identifier, static::dataDir());
+        $data = JSONStore::find(static::storeName(), $identifier, static::dataDir());
         if (!$data) {
             return null;
         }

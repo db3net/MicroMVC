@@ -4,12 +4,12 @@ class hello extends Controller
 {
     public function index(): void
     {
-        $this->json_output(['message' => 'Hello from MicroMVC!']);
+        $this->jsonOutput(['message' => 'Hello from MicroMVC!']);
     }
 
     public function greet(string $name = 'world'): void
     {
-        $this->json_output(['hello' => $name]);
+        $this->jsonOutput(['hello' => $name]);
     }
 }
 

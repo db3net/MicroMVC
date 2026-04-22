@@ -1,11 +1,19 @@
 # MicroMVC
 
-A radically lightweight, single-file PHP micro-framework. The entire MVC stack — routing, controllers, views, models, and a JSON file-store — in one file with zero dependencies making this possibly the lightest PHP MVC framework.
+A radically lightweight PHP micro-framework where the entire stack — routing, controllers, views, models, and a JSON file-store — lives in a single file with zero dependencies. No Composer. No vendor directory. No build step. Just one file and you're shipping.
 
-- **~35KB** on disk. The whole framework.
-- **No `composer install`**. No vendor directory. No lock files.
-- **Sub-millisecond overhead**. Your code is the bottleneck, not ours.
-- **~30MB Docker image**. Built for containers and microservices.
+While most frameworks require a package manager, hundreds of dependencies, generated autoloaders, and cache warming before you write a line of code, MicroMVC skips all of that. Drop one file into your project and you have a complete MVC stack with convention-based routing, swappable model backends (JSON, MySQL, PostgreSQL), a built-in file store, CLI support, and six layers of security hardened into the core — input validation, path-traversal protection, method-access controls, framework-class blocking, controller type checking, and collection-name sanitization.
+
+It's built for developers who want to move fast without dragging a supply chain behind them. REST APIs, internal tools, microservices, containerized workloads, rapid prototypes — anywhere you need PHP that starts instantly and stays out of your way.
+
+- **~35KB total footprint**. One file. That's the whole framework.
+- **Zero dependencies**. No Composer, no lock files, no autoloader ceremony, no supply chain risk.
+- **Sub-millisecond overhead**. Your code is the bottleneck, not the framework.
+- **~30MB Docker image**. Alpine + your code, nothing else. Purpose-built for containers.
+- **Convention-based routing**. URLs map directly to controllers — no route files to maintain.
+- **Three model backends**. JSONModel for file storage, MySQLModel and PGModel for databases. Swap with one line.
+- **Security by default**. Six built-in protections so you're hardened from the first request.
+- **CLI-ready**. Run any controller from the command line with the same routing logic.
 
 ## Install
 
@@ -55,12 +63,12 @@ class hello extends Controller
 {
     public function index(): void
     {
-        $this->json_output(['message' => 'Hello from MicroMVC!']);
+        $this->jsonOutput(['message' => 'Hello from MicroMVC!']);
     }
 
     public function greet(string $name = 'world'): void
     {
-        $this->json_output(['hello' => $name]);
+        $this->jsonOutput(['hello' => $name]);
     }
 }
 ?>

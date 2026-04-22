@@ -60,17 +60,17 @@ class users extends Controller
     {
         $user = new User('David', 'david@example.com');
         $user->save();
-        $this->json_output(['status' => 'created']);
+        $this->jsonOutput(['status' => 'created']);
     }
 
     public function show(string $email): void
     {
         $user = User::find($email);
         if (!$user) {
-            $this->json_output(['error' => 'Not found']);
+            $this->jsonOutput(['error' => 'Not found']);
             return;
         }
-        $this->json_output(['name' => $user->name, 'email' => $user->email]);
+        $this->jsonOutput(['name' => $user->name, 'email' => $user->email]);
     }
 }
 ?>
